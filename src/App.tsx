@@ -34,6 +34,8 @@ function App() {
       currentTrigram: pickNewTrigram(new Set()),
       usedWords: new Set<string>(),
       usedTrigrams: new Set<string>(),
+      lives: 3,
+      isGameOver: false,
     };
   });
 
@@ -43,10 +45,58 @@ function App() {
   const [availableTrigrams, setAvailableTrigrams] = useState<string[]>([]);
   const [selectedTrigramIndex, setSelectedTrigramIndex] = useState(0);
   const [isPickingTrigram, setIsPickingTrigram] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(5);
+  const timerRef = useRef<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Reset timer when game state changes or when switching to trigram selection
+  useEffect(() => {
+    if (gameState.isGameOver) return;
+
+    setTimeLeft(5);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+
+    timerRef.current = window.setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          // Time's up! Lose a life and pick a new trigram
+          setGameState((prevState) => {
+            const newLives = prevState.lives - 1;
+            const newTrigram = pickNewTrigram(prevState.usedTrigrams);
+            return {
+              currentTrigram: newTrigram,
+              usedWords: prevState.usedWords,
+              usedTrigrams: new Set(prevState.usedTrigrams).add(newTrigram),
+              lives: newLives,
+              isGameOver: newLives <= 0,
+            };
+          });
+          // If we were picking a trigram, reset to word input phase
+          if (isPickingTrigram) {
+            setLastWord(null);
+            setAvailableTrigrams([]);
+            setSelectedTrigramIndex(0);
+            setIsPickingTrigram(false);
+          }
+          return 5; // Reset timer
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, [gameState.currentTrigram, gameState.isGameOver, isPickingTrigram]);
+
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
   // Handle arrow key navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -65,6 +115,8 @@ function App() {
             currentTrigram: selectedTrigram,
             usedWords: prev.usedWords,
             usedTrigrams: new Set(prev.usedTrigrams).add(selectedTrigram),
+            lives: prev.lives,
+            isGameOver: prev.isGameOver,
           }));
           setLastWord(null);
           setAvailableTrigrams([]);
@@ -121,6 +173,8 @@ function App() {
               currentTrigram: newTrigram,
               usedWords: prev.usedWords,
               usedTrigrams: new Set(prev.usedTrigrams).add(newTrigram),
+              lives: prev.lives,
+              isGameOver: prev.isGameOver,
             }));
             setLastWord(null);
             setAvailableTrigrams([]);
@@ -188,27 +242,72 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center">
-      {lastWord && (
-        <div className="mt-4">
-          <div className="flex gap-2 items-center justify-center">
-            {renderWordWithHighlight()}
-          </div>
+      {gameState.isGameOver ? (
+        <div className="text-center">
+          <h1 className="text-3xl font-bold text-red-600 mb-4">Game Over!</h1>
+          <button
+            onClick={() => {
+              setGameState({
+                currentTrigram: pickNewTrigram(new Set()),
+                usedWords: new Set<string>(),
+                usedTrigrams: new Set<string>(),
+                lives: 3,
+                isGameOver: false,
+              });
+              setTimeLeft(5);
+            }}
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+          >
+            Play Again
+          </button>
         </div>
+      ) : (
+        <>
+          {lastWord && (
+            <div className="mt-4">
+              <div className="flex gap-2 items-center justify-center">
+                {renderWordWithHighlight()}
+              </div>
+            </div>
+          )}
+          <p className="text-gray-600 mb-4">
+            <span className="font-bold">{gameState.currentTrigram}</span>
+          </p>
+          <div className="flex flex-col gap-4">
+            <div className="flex justify-end">
+              <div className="flex items-center gap-1">
+                {Array.from({ length: gameState.lives }).map((_, i) => (
+                  <svg
+                    key={i}
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5 text-red-500"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                ))}
+              </div>
+            </div>
+            <input
+              ref={inputRef}
+              type="text"
+              value={inputWord}
+              onChange={(e) => setInputWord(e.target.value)}
+              placeholder="Enter a word containing the trigram"
+              className="w-64 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <div className="text-center">
+              <span className="font-bold">{timeLeft}s</span>
+            </div>
+            {error && <p className="w-64 text-red-500 text-sm">{error}</p>}
+          </div>
+        </>
       )}
-      <p className="text-gray-600 mb-4">
-        <span className="font-bold">{gameState.currentTrigram}</span>
-      </p>
-      <div className="flex flex-col gap-4">
-        <input
-          ref={inputRef}
-          type="text"
-          value={inputWord}
-          onChange={(e) => setInputWord(e.target.value)}
-          placeholder="Enter a word containing the trigram"
-          className="w-64 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        {error && <p className="w-64 text-red-500 text-sm">{error}</p>}
-      </div>
     </div>
   );
 }
