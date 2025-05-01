@@ -1,0 +1,37 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Sliding Trigram - Technical Guide
+
+This document describes the architecture, setup, workflow, and key development patterns for the game Sliding Trigram.
+
+## 1. Project Overview
+*   **Goal:** Create a single player web game called Bombparty
+*   **Frontend:** Client application built with Vite, React, Tailwind (using the vite tailwind package `@tailwindcss/vite` ), and TypeScript
+
+## 2. Game Architecture
+
+The game uses a modular, component-based architecture with the following core systems:
+
+1. **Core Game Loop**: Managed in `client/src/App.tsx`, which initializes all components
+2. **UI**: Written in React
+3. **Words list** `words.txt` contains a dictionary of all valid words 
+
+## 3. Development Process for New Features
+
+1. **Planning Phase**:
+   - Scan all relevant files the feature may impact
+   - Identify any dependencies
+   - Map out technical requirements in detail
+   - Create a detailed markdown tasklist
+
+2. **Implementation Phase**:
+   - Implement client-side components
+   - Optimize performance
+
+3. **Testing**:
+   - Test with multiple simultaneous connections
+   - Verify behavior with high latency
+   - Check error conditions and edge cases
