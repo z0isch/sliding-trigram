@@ -48,8 +48,8 @@ function App() {
   const [availableTrigrams, setAvailableTrigrams] = useState<string[]>([]);
   const [selectedTrigramIndex, setSelectedTrigramIndex] = useState(0);
   const [isPickingTrigram, setIsPickingTrigram] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(5);
-  const [timerLength, setTimerLength] = useState(5);
+  const [timeLeft, setTimeLeft] = useState(7);
+  const [timerLength, setTimerLength] = useState(7);
   const [isStarted, setIsStarted] = useState(false);
   const timerRef = useRef<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -87,6 +87,10 @@ function App() {
             setAvailableTrigrams([]);
             setSelectedTrigramIndex(0);
             setIsPickingTrigram(false);
+            // Focus the input after resetting trigram selection
+            setTimeout(() => {
+              inputRef.current?.focus();
+            }, 0);
           }
           // Clear error and input
           setError(null);
@@ -129,7 +133,7 @@ function App() {
           isGameOver: false,
           isWin: false,
         });
-        setTimeLeft(5);
+        setTimeLeft(7);
         setTimeout(() => {
           inputRef.current?.focus();
         }, 0);
@@ -342,6 +346,11 @@ function App() {
           <h1 className="text-4xl font-bold text-blue-600 mb-8">
             Sliding Trigram
           </h1>
+          <p className="text-sm text-gray-500 mb-8 max-w-md mx-auto">
+            Type words that contain the given trigram (3-letter sequence). Each
+            new word must use a different trigram from the previous word. Use
+            all letters of the alphabet to win!
+          </p>
           <div className="mb-8">
             <label className="block text-lg text-gray-600 mb-4">
               Timer Length (seconds):
@@ -355,7 +364,7 @@ function App() {
               </button>
               <span className="text-2xl font-medium w-12">{timerLength}</span>
               <button
-                onClick={() => setTimerLength(Math.min(10, timerLength + 1))}
+                onClick={() => setTimerLength(Math.min(20, timerLength + 1))}
                 className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 text-xl"
               >
                 +
@@ -416,7 +425,7 @@ function App() {
                 isGameOver: false,
                 isWin: false,
               });
-              setTimeLeft(timerLength);
+              setTimeLeft(7);
               setTimeout(() => {
                 inputRef.current?.focus();
               }, 0);
@@ -461,7 +470,7 @@ function App() {
                 isGameOver: false,
                 isWin: false,
               });
-              setTimeLeft(timerLength);
+              setTimeLeft(7);
               setTimeout(() => {
                 inputRef.current?.focus();
               }, 0);
@@ -490,7 +499,7 @@ function App() {
                     className="text-blue-500 transition-all duration-1000 ease-linear"
                     strokeWidth="2"
                     strokeDasharray="150.8"
-                    strokeDashoffset={`${150.8 * (1 - timeLeft / 5)}`}
+                    strokeDashoffset={`${150.8 * (1 - timeLeft / timerLength)}`}
                     strokeLinecap="round"
                     stroke="currentColor"
                     fill="transparent"
@@ -558,7 +567,7 @@ function App() {
             )}
             {error && <p className="text-red-500 text-sm">{error}</p>}
             <div className="w-full">
-              <p className="text-xs text-gray-400 mb-2 text-center">
+              <p className="text-sm font-medium text-gray-500 mb-2 text-center">
                 Use all letters to win! Long words ({">"}10 letters) give bonus
                 letters.
               </p>
