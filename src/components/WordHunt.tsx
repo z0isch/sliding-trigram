@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import "./App.css";
-import { GameState } from "./types";
-import { easyTrigrams, isValidWord } from "./words";
+import { GameState } from "../types";
+import { easyTrigrams, isValidWord } from "../words";
 
 // Function to get all trigrams from a word
 function getTrigrams(word: string): string[] {
@@ -27,7 +26,7 @@ const pickNewTrigram = (usedTrigrams: Set<string>): string => {
   return availableTrigrams[randomIndex];
 };
 
-function App() {
+export default function WordHunt() {
   // Initialize game state with a random trigram from the easy list
   const [gameState, setGameState] = useState<GameState>(() => {
     return {
@@ -599,5 +598,3 @@ function App() {
     </div>
   );
 }
-
-export default App;
