@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { GameState } from "../types";
-import { easyTrigrams, isValidWord } from "../words";
+import { WordHuntGameState, DictionaryResponse } from "../types";
+import { easyTrigrams, isValidWord, wordSet } from "../words";
 
 // Function to get all trigrams from a word
 function getTrigrams(word: string): string[] {
@@ -26,15 +26,47 @@ const pickNewTrigram = (usedTrigrams: Set<string>): string => {
   return availableTrigrams[randomIndex];
 };
 
+// Function to pick a random 11-letter word from the dictionary
+const pickTargetWord = (): string => {
+  const elevenLetterWords = Array.from(wordSet).filter(
+    (word) => word.length === 11
+  );
+  const randomIndex = Math.floor(Math.random() * elevenLetterWords.length);
+  return elevenLetterWords[randomIndex];
+};
+
+// Function to fetch word definition
+const fetchWordDefinition = async (word: string): Promise<string | null> => {
+  try {
+    const response = await fetch(
+      `https://api.dictionaryapi.dev/api/v2/entries/en/${word}`
+    );
+    if (!response.ok) {
+      return null;
+    }
+    const data: DictionaryResponse = await response.json();
+    if (data.length === 0) {
+      return null;
+    }
+    // Get the first definition from the first meaning
+    const firstDefinition = data[0].meanings[0]?.definitions[0]?.definition;
+    return firstDefinition || null;
+  } catch (error) {
+    console.error("Error fetching definition:", error);
+    return null;
+  }
+};
+
 export default function WordHunt() {
-  // Initialize game state with a random trigram from the easy list
-  const [gameState, setGameState] = useState<GameState>(() => {
+  // Initialize game state with a random trigram from the easy list and a target word
+  const [gameState, setGameState] = useState<WordHuntGameState>(() => {
     return {
       currentTrigram: pickNewTrigram(new Set()),
       usedWords: new Set<string>(),
       usedTrigrams: new Set<string>(),
-      usedLetters: new Set<string>(),
-      bonusLetters: new Set<string>(),
+      targetWord: pickTargetWord(),
+      currentWord: null,
+      targetWordDefinition: null,
       lives: 3,
       isGameOver: false,
       isWin: false,
@@ -53,6 +85,18 @@ export default function WordHunt() {
   const timerRef = useRef<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Fetch definition when target word changes
+  useEffect(() => {
+    const fetchDefinition = async () => {
+      const definition = await fetchWordDefinition(gameState.targetWord);
+      setGameState((prev) => ({
+        ...prev,
+        targetWordDefinition: definition,
+      }));
+    };
+    fetchDefinition();
+  }, [gameState.targetWord]);
+
   // Reset timer when game state changes or when switching to trigram selection
   useEffect(() => {
     if (gameState.isGameOver) return;
@@ -70,14 +114,11 @@ export default function WordHunt() {
             const newLives = prevState.lives - 1;
             const newTrigram = pickNewTrigram(prevState.usedTrigrams);
             return {
+              ...prevState,
               currentTrigram: newTrigram,
-              usedWords: prevState.usedWords,
               usedTrigrams: new Set(prevState.usedTrigrams).add(newTrigram),
-              usedLetters: prevState.usedLetters,
-              bonusLetters: prevState.bonusLetters,
               lives: newLives,
               isGameOver: newLives <= 0,
-              isWin: false,
             };
           });
           // If we were picking a trigram, reset to word input phase
@@ -122,12 +163,14 @@ export default function WordHunt() {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Enter") {
+        const newTargetWord = pickTargetWord();
         setGameState({
           currentTrigram: pickNewTrigram(new Set()),
           usedWords: new Set<string>(),
           usedTrigrams: new Set<string>(),
-          usedLetters: new Set<string>(),
-          bonusLetters: new Set<string>(),
+          targetWord: newTargetWord,
+          currentWord: null,
+          targetWordDefinition: null,
           lives: 3,
           isGameOver: false,
           isWin: false,
@@ -158,14 +201,10 @@ export default function WordHunt() {
 
           // Confirm selection and update game state
           setGameState((prev) => ({
+            ...prev,
             currentTrigram: selectedTrigram,
-            usedWords: prev.usedWords,
             usedTrigrams: new Set(prev.usedTrigrams).add(selectedTrigram),
-            usedLetters: prev.usedLetters,
-            bonusLetters: prev.bonusLetters,
-            lives: prev.lives,
-            isGameOver: prev.isGameOver,
-            isWin: prev.isWin,
+            currentWord: lastWord,
           }));
           setLastWord(null);
           setAvailableTrigrams([]);
@@ -210,32 +249,6 @@ export default function WordHunt() {
           const newUsedTrigrams = new Set(gameState.usedTrigrams).add(
             gameState.currentTrigram
           );
-          const newUsedLetters = new Set(gameState.usedLetters);
-          const newBonusLetters = new Set(gameState.bonusLetters);
-
-          // Add all letters from the word to used letters
-          inputWord
-            .toLowerCase()
-            .split("")
-            .forEach((letter) => newUsedLetters.add(letter));
-
-          // If word is longer than 10 letters, add a random bonus letter
-          if (inputWord.length > 10) {
-            const unusedLetters = Array.from({ length: 26 }, (_, i) =>
-              String.fromCharCode(97 + i)
-            ).filter(
-              (letter) =>
-                !newUsedLetters.has(letter) && !newBonusLetters.has(letter)
-            );
-
-            if (unusedLetters.length > 0) {
-              const randomIndex = Math.floor(
-                Math.random() * unusedLetters.length
-              );
-              const bonusLetter = unusedLetters[randomIndex];
-              newBonusLetters.add(bonusLetter);
-            }
-          }
 
           // Update game state with the word
           setGameState((prev) => {
@@ -243,12 +256,11 @@ export default function WordHunt() {
               ...prev,
               usedWords: newUsedWords,
               usedTrigrams: newUsedTrigrams,
-              usedLetters: newUsedLetters,
-              bonusLetters: newBonusLetters,
+              currentWord: inputWord.toLowerCase(),
             };
 
-            // Check for win condition (all letters used)
-            if (newState.usedLetters.size + newState.bonusLetters.size === 26) {
+            // Check for win condition (reached target word)
+            if (inputWord.toLowerCase() === prev.targetWord) {
               newState.isWin = true;
             }
 
@@ -265,14 +277,10 @@ export default function WordHunt() {
             // All trigrams have been used, pick a random new one
             const newTrigram = pickNewTrigram(gameState.usedTrigrams);
             setGameState((prev) => ({
+              ...prev,
               currentTrigram: newTrigram,
-              usedWords: prev.usedWords,
               usedTrigrams: new Set(prev.usedTrigrams).add(newTrigram),
-              usedLetters: prev.usedLetters,
-              bonusLetters: prev.bonusLetters,
-              lives: prev.lives,
-              isGameOver: prev.isGameOver,
-              isWin: prev.isWin,
+              currentWord: inputWord.toLowerCase(),
             }));
             setLastWord(null);
             setAvailableTrigrams([]);
@@ -314,6 +322,7 @@ export default function WordHunt() {
     isPickingTrigram,
     inputWord,
     gameState,
+    lastWord,
   ]);
 
   const renderWordWithHighlight = () => {
@@ -342,13 +351,11 @@ export default function WordHunt() {
     <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center">
       {!isStarted ? (
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-blue-600 mb-8">
-            Sliding Trigram
-          </h1>
+          <h1 className="text-4xl font-bold text-blue-600 mb-8">Word Hunt</h1>
           <p className="text-sm text-gray-500 mb-8 max-w-md mx-auto">
             Type words that contain the given trigram (3-letter sequence). Each
-            new word must use a different trigram from the previous word. Use
-            all letters of the alphabet to win!
+            new word must use a different trigram from the previous word. Try to
+            reach the target word before running out of lives!
           </p>
           <div className="mb-8">
             <label className="block text-lg text-gray-600 mb-4">
@@ -388,10 +395,14 @@ export default function WordHunt() {
           <h1 className="text-4xl font-bold text-green-600 mb-4">
             You Win! 🎉
           </h1>
-          <p className="text-lg text-gray-600 mb-6">
-            You used all{" "}
-            {gameState.usedLetters.size + gameState.bonusLetters.size} letters!
+          <p className="text-lg text-gray-600 mb-2">
+            You reached the target word: {gameState.targetWord}
           </p>
+          {gameState.targetWordDefinition && (
+            <p className="text-sm text-gray-500 mb-4 italic">
+              Definition: {gameState.targetWordDefinition}
+            </p>
+          )}
           <div className="mb-6">
             <label className="block text-sm text-gray-600 mb-2">
               Timer Length (seconds):
@@ -414,12 +425,14 @@ export default function WordHunt() {
           </div>
           <button
             onClick={() => {
+              const newTargetWord = pickTargetWord();
               setGameState({
                 currentTrigram: pickNewTrigram(new Set()),
                 usedWords: new Set<string>(),
                 usedTrigrams: new Set<string>(),
-                usedLetters: new Set<string>(),
-                bonusLetters: new Set<string>(),
+                targetWord: newTargetWord,
+                currentWord: null,
+                targetWordDefinition: null,
                 lives: 3,
                 isGameOver: false,
                 isWin: false,
@@ -437,6 +450,14 @@ export default function WordHunt() {
       ) : gameState.isGameOver ? (
         <div className="text-center">
           <h1 className="text-3xl font-bold text-red-600 mb-4">Game Over!</h1>
+          <p className="text-lg text-gray-600 mb-2">
+            The target word was: {gameState.targetWord}
+          </p>
+          {gameState.targetWordDefinition && (
+            <p className="text-sm text-gray-500 mb-4 italic">
+              Definition: {gameState.targetWordDefinition}
+            </p>
+          )}
           <div className="mb-6">
             <label className="block text-sm text-gray-600 mb-2">
               Timer Length (seconds):
@@ -459,12 +480,14 @@ export default function WordHunt() {
           </div>
           <button
             onClick={() => {
+              const newTargetWord = pickTargetWord();
               setGameState({
                 currentTrigram: pickNewTrigram(new Set()),
                 usedWords: new Set<string>(),
                 usedTrigrams: new Set<string>(),
-                usedLetters: new Set<string>(),
-                bonusLetters: new Set<string>(),
+                targetWord: newTargetWord,
+                currentWord: null,
+                targetWordDefinition: null,
                 lives: 3,
                 isGameOver: false,
                 isWin: false,
@@ -550,6 +573,24 @@ export default function WordHunt() {
             </p>
           )}
           <div className="flex flex-col gap-4">
+            <div className="text-center mb-4">
+              <p className="text-sm font-medium text-gray-500 mb-1">
+                Target word:
+              </p>
+              <p className="text-3xl font-bold text-blue-600 mb-1">
+                {gameState.targetWord}
+              </p>
+              {gameState.targetWordDefinition && (
+                <p className="text-sm text-gray-500 italic">
+                  {gameState.targetWordDefinition}
+                </p>
+              )}
+              {gameState.currentWord && (
+                <p className="text-sm font-medium text-gray-500 mt-2">
+                  Current word: {gameState.currentWord}
+                </p>
+              )}
+            </div>
             {!isPickingTrigram && (
               <input
                 ref={inputRef}
@@ -565,33 +606,6 @@ export default function WordHunt() {
               />
             )}
             {error && <p className="text-red-500 text-sm">{error}</p>}
-            <div className="w-full">
-              <p className="text-sm font-medium text-gray-500 mb-2 text-center">
-                Use all letters to win! Long words ({">"}10 letters) give bonus
-                letters.
-              </p>
-              <div className="grid grid-cols-13 gap-1">
-                {Array.from({ length: 26 }, (_, i) => {
-                  const letter = String.fromCharCode(97 + i); // 97 is 'a' in ASCII
-                  const isUsed = gameState.usedLetters.has(letter);
-                  const isBonus = gameState.bonusLetters.has(letter);
-                  return (
-                    <span
-                      key={letter}
-                      className={`px-3 py-1.5 rounded-full text-sm text-center ${
-                        isBonus
-                          ? "bg-yellow-500 text-white"
-                          : isUsed
-                          ? "bg-blue-500 text-white"
-                          : "bg-gray-100 text-gray-400"
-                      }`}
-                    >
-                      {letter}
-                    </span>
-                  );
-                })}
-              </div>
-            </div>
           </div>
         </>
       )}
